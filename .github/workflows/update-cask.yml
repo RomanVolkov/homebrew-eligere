@@ -1,0 +1,99 @@
+name: Update Eligere Cask
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-cask:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Install xmlstarlet for XML parsing
+        run: sudo apt-get update && sudo apt-get install -y xmlstarlet
+        
+      - name: Get latest version from Sparkle appcast
+        id: get_version
+        run: |
+          curl -s "https://update.eligere.dev/appcast.xml" -o appcast.xml
+          
+          LATEST_BUILD=$(xmlstarlet sel -t -v "//item[1]/enclosure/@sparkle:version" appcast.xml)
+          LATEST_MARKETING=$(xmlstarlet sel -t -v "//item[1]/enclosure/@sparkle:shortVersionString" appcast.xml)
+          
+          LATEST_VERSION="${LATEST_MARKETING}_${LATEST_BUILD}"
+          
+          echo "Latest version from appcast: $LATEST_VERSION"
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          
+      - name: Get current version from cask
+        id: current_version
+        run: |
+          CURRENT_VERSION=$(grep -o 'version "[^"]*"' Casks/eligere.rb | sed 's/version "\(.*\)"/\1/')
+          echo "Current version in cask: $CURRENT_VERSION"
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+      - name: Compare versions and update if different
+        id: update_check
+        run: |
+          if [ "${{ steps.get_version.outputs.latest_version }}" != "${{ steps.current_version.outputs.current_version }}" ]; then
+            echo "Version update needed: ${{ steps.current_version.outputs.current_version }} -> ${{ steps.get_version.outputs.latest_version }}"
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+          else
+            echo "No update needed. Current version is latest."
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Download new DMG and calculate SHA256
+        if: steps.update_check.outputs.needs_update == 'true'
+        id: calculate_sha
+        run: |
+          NEW_VERSION="${{ steps.get_version.outputs.latest_version }}"
+          DMG_URL="https://update.eligere.dev/Eligere_${NEW_VERSION}_Installer_compressed.dmg"
+          
+          echo "Downloading DMG from: $DMG_URL"
+          
+          # Download the DMG
+          if curl -L --fail -o eligere.dmg "$DMG_URL"; then
+            # Calculate SHA256
+            NEW_SHA256=$(shasum -a 256 eligere.dmg | cut -d' ' -f1)
+            echo "New SHA256: $NEW_SHA256"
+            echo "new_sha256=$NEW_SHA256" >> $GITHUB_OUTPUT
+            
+            # Clean up
+            rm eligere.dmg
+          else
+            echo "Failed to download DMG from $DMG_URL"
+            exit 1
+          fi
+          
+      - name: Update cask file
+        if: steps.update_check.outputs.needs_update == 'true'
+        run: |
+          NEW_VERSION="${{ steps.get_version.outputs.latest_version }}"
+          NEW_SHA256="${{ steps.calculate_sha.outputs.new_sha256 }}"
+          
+          sed -i "s/version \".*\"/version \"$NEW_VERSION\"/" Casks/eligere.rb
+          sed -i "s/sha256 \".*\"/sha256 \"$NEW_SHA256\"/" Casks/eligere.rb
+          
+          echo "Updated cask file with version $NEW_VERSION and SHA256 $NEW_SHA256"
+          
+      - name: Commit and push changes
+        if: steps.update_check.outputs.needs_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add Casks/eligere.rb
+          git commit -m "Update Eligere to version ${{ steps.get_version.outputs.latest_version }}"
+          git push
+          
+      - name: Create release notes (optional)
+        if: steps.update_check.outputs.needs_update == 'true'
+        run: |
+          echo "Successfully updated Eligere cask from ${{ steps.current_version.outputs.current_version }} to ${{ steps.get_version.outputs.latest_version }}"
