@@ -4,7 +4,7 @@ cask "eligere" do
 
   url "https://update.eligere.dev/Eligere_#{version}_Installer_compressed.dmg"
   name "Eligere"
-  desc "Makes better links routing"
+  desc "Helps you to use the right browser always"
   homepage "https://eligere.dev"
 
   livecheck do
