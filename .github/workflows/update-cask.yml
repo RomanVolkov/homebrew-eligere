@@ -21,10 +21,9 @@ jobs:
       - name: Get latest version from Sparkle appcast
         id: get_version
         run: |
-          curl -s "https://update.eligere.dev/appcast.xml" -o appcast.xml
           
-          LATEST_BUILD=$(xmlstarlet sel -t -v "//item[1]/enclosure/@sparkle:version" appcast.xml)
-          LATEST_MARKETING=$(xmlstarlet sel -t -v "//item[1]/enclosure/@sparkle:shortVersionString" appcast.xml)
+          LATEST_BUILD=$(curl -s "https://update.eligere.dev/appcast.xml" | xmlstarlet sel -t -v "//item[1]/enclosure/@sparkle:version")
+          LATEST_MARKETING=$(curl -s "https://update.eligere.dev/appcast.xml" | xmlstarlet sel -t -v "//item[1]/enclosure/@sparkle:shortVersionString")
           
           LATEST_VERSION="${LATEST_MARKETING}_${LATEST_BUILD}"
           
