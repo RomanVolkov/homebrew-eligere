@@ -1,6 +1,6 @@
 cask "eligere" do
-  version "1.4.0_24"
-  sha256 "866ec98f483454d05070ac99c0d966d5b043e92190c5bc9f588377596a5a2a5f"
+  version "1.4.1_25"
+  sha256 "0063b9d6f5b21da0553741ff27d82b6dac24e27e9fcf0ac71d6167b5ba1d18ee"
 
   url "https://update.eligere.dev/Eligere_#{version}_Installer_compressed.dmg"
   name "Eligere"
