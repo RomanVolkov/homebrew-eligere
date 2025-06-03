@@ -43,8 +43,8 @@ jobs:
           TOKEN: ${{ secrets.ACTION_TOKEN }}
         if: steps.check_update.outputs.update_needed == 'true'
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          # git config --local user.email "action@github.com"
+          # git config --local user.name "GitHub Action"
 
           git add Casks/eligere.rb
           
