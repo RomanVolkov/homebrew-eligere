@@ -39,21 +39,18 @@ jobs:
           fi
           
       - name: Commit and push changes
-        env:
-            GITHUB_ACTOR: ${{ github.actor }}
-            MY_GH_PAT: ${{ secrets.ACTION_TOKEN }}
         if: steps.check_update.outputs.update_needed == 'true'
         run: |
-            git config --local user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-            git config --local user.name "${GITHUB_ACTOR}"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
 
-            git add Casks/eligere.rb
-            
-            NEW_VERSION=$(grep -o 'version "[^"]*"' Casks/eligere.rb | cut -d'"' -f2)
-            
-            git commit -m "Update Eligere to version $NEW_VERSION"
-            
-            git push origin main
+          git add Casks/eligere.rb
+          
+          NEW_VERSION=$(grep -o 'version "[^"]*"' Casks/eligere.rb | cut -d'"' -f2)
+          
+          git commit -m "Update Eligere to version $NEW_VERSION"
+          
+          git push origin main
           
       - name: Create release notes
         if: steps.check_update.outputs.update_needed == 'true'
