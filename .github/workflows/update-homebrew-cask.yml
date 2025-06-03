@@ -39,6 +39,8 @@ jobs:
           fi
           
       - name: Commit and push changes
+        env:
+          TOKEN: ${{ secrets.ACTION_TOKEN }}
         if: steps.check_update.outputs.update_needed == 'true'
         run: |
           git config --local user.email "action@github.com"
