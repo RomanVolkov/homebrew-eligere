@@ -1,8 +1,8 @@
 cask "eligere" do
-  version "1.4.6_30"
-  sha256 "c2c71fe89325dc36f0148acb28905bd0ef6ea49270eaeb3873ac107b4bf31d16"
+  version "2.0.0_31,v2.0.0"
+  sha256 "016d61a8d4bffb045a1cbf8d96fd25f0102e05cc81feafedc95e43256fb13d51"
 
-  url "https://update.eligere.dev/Eligere_#{version}_Installer_compressed.dmg"
+  url "https://github.com/RomanVolkov/eligere_app/releases/download/#{version.csv.second}/Eligere_#{version.csv.first}_Installer_compressed.dmg"
   name "Eligere"
   desc "Helps you to use the right browser always"
   homepage "https://github.com/RomanVolkov/eligere_app"
