@@ -1,61 +1,138 @@
-name: Update Homebrew Cask
+name: Update Eligere Cask
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
-  workflow_dispatch:
+    - cron: "0 */6 * * *"  # every 6 hours
+  workflow_dispatch:      # manual trigger
+
+permissions:
+  contents: write
 
 jobs:
   update-cask:
     runs-on: ubuntu-latest
-    
+    env:
+      APP_REPO: RomanVolkov/eligere_app
+      CASK_PATH: Casks/eligere.rb
+
     steps:
-      - name: Checkout repository
+      - name: Checkout tap repo
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          
-      - name: Install dependencies
-        run: |
-          pip install requests lxml
-          
-      - name: Update Eligere cask
-        run: |
-          python3  update.py         
 
-      - name: Check if update was made
-        id: check_update
+      - name: Ensure jq is available
         run: |
-          if [ -f update_needed.txt ]; then
-            UPDATE_NEEDED=$(cat update_needed.txt)
-            echo "update_needed=$UPDATE_NEEDED" >> $GITHUB_OUTPUT
-          else
-            echo "update_needed=false" >> $GITHUB_OUTPUT
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y jq
           fi
-          
-      - name: Commit and push changes
-        if: steps.check_update.outputs.update_needed == 'true'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
 
-          git add Casks/eligere.rb
-          
-          NEW_VERSION=$(grep -o 'version "[^"]*"' Casks/eligere.rb | cut -d'"' -f2)
-          
-          git commit -m "Update Eligere to version $NEW_VERSION"
-          
-          git push origin main
-          
-      - name: Create release notes
-        if: steps.check_update.outputs.update_needed == 'true'
+      - name: Read current cask version
+        id: current
+        shell: bash
         run: |
-          NEW_VERSION=$(grep -o 'version "[^"]*"' Casks/eligere.rb | cut -d'"' -f2)
-          echo "✅ Successfully updated Eligere cask to version $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
-          echo "- Updated version and SHA256 hash" >> $GITHUB_STEP_SUMMARY
-          echo "- Changes committed to main branch" >> $GITHUB_STEP_SUMMARY
+          # Extract the first part of the version (before comma, if CSV is used)
+          VERSTR=$(awk -F '"' '/^\s*version\s+\"/ { print $2; exit }' "$CASK_PATH" || true)
+          CURRENT_VERSION=$(echo "$VERSTR" | cut -d',' -f1 | tr -d ' ')
+          echo "Current cask file version: $CURRENT_VERSION"
+          echo "current=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch latest release metadata from GitHub
+        id: latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          api_url="https://api.github.com/repos/${APP_REPO}/releases/latest"
+          curl -sS -H "Accept: application/vnd.github+json" \
+               -H "Authorization: Bearer ${GH_TOKEN}" \
+               "$api_url" > latest.json
+
+          TAG=$(jq -r '.tag_name' latest.json)
+          if [[ -z "$TAG" || "$TAG" == "null" ]]; then
+            echo "No tag_name found on latest release. Exiting." >&2
+            exit 1
+          fi
+
+          # Prefer a DMG asset
+          ASSET_URL=$(jq -r '.assets[] | select(.name | test("\\.dmg$")) | .browser_download_url' latest.json | head -n1)
+          if [[ -z "$ASSET_URL" || "$ASSET_URL" == "null" ]]; then
+            echo "No .dmg asset found on latest release. Exiting." >&2
+            exit 1
+          fi
+
+          ASSET_NAME=$(basename "$ASSET_URL")
+
+          # Derive the filename version (without leading 'v')
+          TAG_NO_V=${TAG#v}
+          if [[ "$ASSET_NAME" =~ Eligere_(.*)_Installer.*\.dmg ]]; then
+            FILE_VER="${BASH_REMATCH[1]}"
+          else
+            FILE_VER="$TAG_NO_V"
+          fi
+
+          echo "Latest tag: $TAG"
+          echo "Latest filename version: $FILE_VER"
+          echo "Asset: $ASSET_NAME"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "file_version=$FILE_VER" >> "$GITHUB_OUTPUT"
+          echo "asset_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Check if update is needed
+        id: check
+        run: |
+          if [[ "${{ steps.latest.outputs.file_version }}" == "${{ steps.current.outputs.current }}" && -n "${{ steps.current.outputs.current }}" ]]; then
+            echo "No update needed."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Update required."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download dmg
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          curl -L "${{ steps.latest.outputs.asset_url }}" -o Eligere.dmg
+
+      - name: Calculate sha256
+        if: steps.check.outputs.changed == 'true'
+        id: sha
+        run: |
+          checksum=$(shasum -a 256 Eligere.dmg | awk '{print $1}')
+          echo "SHA256=$checksum" >> $GITHUB_ENV
+          echo "Calculated SHA256: $checksum"
+
+      - name: Update cask file (version, url, sha256)
+        if: steps.check.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FILE_VER='${{ steps.latest.outputs.file_version }}'
+          TAG='${{ steps.latest.outputs.tag }}'
+
+          # Ensure the cask uses a CSV version so we can interpolate both the tag and filename version
+          # Example result:
+          #   version "1.4.6_30,v1.4.6_30"
+          sed -i -E "s/^\s*version \".*\"/  version \"${FILE_VER},${TAG}\"/" "$CASK_PATH"
+
+          # Point URL to GitHub Releases using both CSV parts
+          #   #{version.csv.first}  -> filename-friendly version (no leading 'v')
+          #   #{version.csv.second} -> tag (may include leading 'v')
+          sed -i -E 's|^\s*url \".*\"|  url \"https://github.com/'"$APP_REPO"'/releases/download/#{version.csv.second}/Eligere_#{version.csv.first}_Installer_compressed.dmg\"|' "$CASK_PATH"
+
+          # Update sha256
+          sed -i -E "s/^\s*sha256 \".*\"/  sha256 \"$SHA256\"/" "$CASK_PATH"
+
+          echo "Updated $CASK_PATH:" && sed -n '1,120p' "$CASK_PATH"
+
+      - name: Commit and push changes
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add "$CASK_PATH"
+          git commit -m "chore(cask): update eligere to ${{ steps.latest.outputs.file_version }} (tag: ${{ steps.latest.outputs.tag }})"
+          git push

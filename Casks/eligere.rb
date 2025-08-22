@@ -5,7 +5,7 @@ cask "eligere" do
   url "https://update.eligere.dev/Eligere_#{version}_Installer_compressed.dmg"
   name "Eligere"
   desc "Helps you to use the right browser always"
-  homepage "https://eligere.dev"
+  homepage "https://github.com/RomanVolkov/eligere_app"
 
   livecheck do
     url :url
