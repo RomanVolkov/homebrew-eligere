@@ -1,6 +1,6 @@
 cask "eligere" do
-  version "2.0.0_31,v2.0.0"
-  sha256 "016d61a8d4bffb045a1cbf8d96fd25f0102e05cc81feafedc95e43256fb13d51"
+  version "2.0.1_32,v2.0.1"
+  sha256 "4f95d3bf9fef7fd8063109729f3260e224f8fab11eaffff46e9ad45248320187"
 
   url "https://github.com/RomanVolkov/eligere_app/releases/download/#{version.csv.second}/Eligere_#{version.csv.first}_Installer_compressed.dmg"
   name "Eligere"
