@@ -13,4 +13,9 @@ cask "eligere" do
   end
 
   app "Eligere.app"
+
+  postflight do
+    system_command "xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/Eligere.app"]
+  end
 end
